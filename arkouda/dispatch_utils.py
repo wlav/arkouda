@@ -95,8 +95,12 @@ class ServerCPUCodegen(nb_cg.JITCPUCodegen):
     def _data_layout(self, value):
         pass
 
+    def _add_module(self, module):
+        # block adding modules to the client-side JIT
+        return
+
     def set_env(self, env_name, env):
-        return None
+        return
 
 
 class ServerLLVMTarget:
@@ -132,51 +136,6 @@ class ServerLLVMTarget:
 
 
 # -- IR compiler ------------------------------------------------------------
-@nb_cmpm.register_pass(mutates_CFG=False, analysis_only=True)
-class NoPythonSummary(nb_cmpm.LoweringPass):
-
-    _name = "nopython_summary"
-
-    def __init__(self):
-        nb_cmpm.LoweringPass.__init__(self)
-
-    def run_pass(self, state):
-        """
-        Summarize compilation results
-        """
-
-        signature = nb_typing.signature(state.return_type, *state.args)
-
-        from numba.core.compiler import compile_result
-        state.cr = compile_result(
-            typing_context=state.typingctx,
-            target_context=state.targetctx,
-            #entry_point=lowered.cfunc,
-            entry_point=None,
-            typing_error=state.status.fail_reason,
-            type_annotation=state.type_annotation,
-            library=state.library,
-            #call_helper=lowered.call_helper,
-            call_helper=None,
-            signature=signature,
-            objectmode=False,
-            lifted=state.lifted,
-            #fndesc=lowered.fndesc,
-            fndesc=None,
-            #environment=lowered.env,
-            environment=None,
-            metadata=state.metadata,
-            reload_init=state.reload_init,
-        )
-        return True
-
-class IROnlyResult:
-    def __init__(self, func_ir, typing_error, library):
-        self.func_ir      = func_ir
-        self.typing_error = typing_error
-        self.library      = library
-
-
 class IRCompiler(nb_cmp.CompilerBase):
     """
     IR compiler based on the Numba compilation chain
