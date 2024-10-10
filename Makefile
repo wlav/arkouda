@@ -198,6 +198,24 @@ install-blosc:
 	rm -rf $(BLOSC_BUILD_DIR)
 	echo '$$(eval $$(call add-path,$(BLOSC_INSTALL_DIR)))' >> Makefile.paths
 
+
+ifdef ARKOUDA_SERVER_JIT
+JITCWRAPPER_FILE_NAME += $(ARKOUDA_SOURCE_DIR)/jitcwrapper/JITCWrapper
+JITCWRAPPER_CPP += $(JITCWRAPPER_FILE_NAME).cpp
+JITCWRAPPER_H += $(JITCWRAPPER_FILE_NAME).h
+JITCWRAPPER_O += $(ARKOUDA_SOURCE_DIR)/JITCWrapper.o
+JITCWRAPPER_CXXFLAGS += $(shell llvm-config --cxxflags)
+JITCWRAPPER_LDFLAGS += $(shell llvm-config --ldflags --system-libs --libs)
+else
+JITCWRAPPER_FILE_NAME +=
+JITCWRAPPER_CPP +=
+JITCWRAPPER_H +=
+JITCWRAPPER_O +=
+JITCWRAPPER_CXXFLAGS +=
+JITCWRAPPER_LDFLAGS +=
+endif
+
+
 # System Environment
 ifdef LD_RUN_PATH
 #CHPL_FLAGS += --ldflags="-Wl,-rpath=$(LD_RUN_PATH)"
@@ -255,6 +273,11 @@ $(ARROW_READ_O): $(ARROW_READ_CPP) $(ARROW_READ_H)
 $(ARROW_WRITE_O): $(ARROW_WRITE_CPP) $(ARROW_WRITE_H)
 	make compile-arrow-write
 
+ifdef ARKOUDA_SERVER_JIT
+$(JITCWRAPPER_O): $(JITCWRAPPER_CPP) $(JITCWRAPPER_H)
+	$(CHPL_CXX) -O3 -std=c++17 $(JITCWRAPPER_CXXFLAGS) -c $(JITCWRAPPER_CPP) -o $(JITCWRAPPER_O) $(INCLUDE_FLAGS)
+endif
+
 CHPL_MAJOR := $(shell $(CHPL) --version | sed -n "s/chpl version \([0-9]\)\.[0-9]*.*/\1/p")
 CHPL_MINOR := $(shell $(CHPL) --version | sed -n "s/chpl version [0-9]\.\([0-9]*\).*/\1/p")
 CHPL_VERSION_OK := $(shell test $(CHPL_MAJOR) -ge 2 -o $(CHPL_MINOR) -ge 0  && echo yes)
@@ -310,6 +333,7 @@ check-idn2: $(IDN2_CHECK)
 	@$(CHPL) $(CHPL_FLAGS) $(ARKOUDA_COMPAT_MODULES) -M $(ARKOUDA_SOURCE_DIR) $< -o $(DEP_INSTALL_DIR)/$@ && ([ $$? -eq 0 ] && echo "Success compiling program") || echo "\nERROR: Please ensure that dependencies have been installed correctly (see -> https://github.com/Bears-R-Us/arkouda/blob/master/pydoc/setup/BUILD.md)\n"
 	$(DEP_INSTALL_DIR)/$@ -nl 1
 	@rm -f $(DEP_INSTALL_DIR)/$@ $(DEP_INSTALL_DIR)/$@_real
+
 
 ALL_TARGETS := $(ARKOUDA_MAIN_MODULE)
 .PHONY: all
@@ -392,15 +416,15 @@ endif
 
 SERVER_CONFIG_SCRIPT=$(ARKOUDA_SOURCE_DIR)/parseServerConfig.py
 # This is the main compilation statement section
-$(ARKOUDA_MAIN_MODULE): check-deps register-commands $(ARROW_UTIL_O) $(ARROW_READ_O) $(ARROW_WRITE_O) $(ARKOUDA_SOURCES) $(ARKOUDA_MAKEFILES)
+$(ARKOUDA_MAIN_MODULE): check-deps register-commands $(ARROW_UTIL_O) $(ARROW_READ_O) $(ARROW_WRITE_O) $(JITCWRAPPER_O) $(ARKOUDA_SOURCES) $(ARKOUDA_MAKEFILES)
 	$(eval MOD_GEN_OUT=$(shell python3 $(SERVER_CONFIG_SCRIPT) $(ARKOUDA_CONFIG_FILE) $(ARKOUDA_REGISTRATION_CONFIG) $(ARKOUDA_SOURCE_DIR)))
 
-	$(CHPL) $(CHPL_DEBUG_FLAGS) $(PRINT_PASSES_FLAGS) $(REGEX_MAX_CAPTURES_FLAG) $(OPTIONAL_SERVER_FLAGS) $(CHPL_FLAGS_WITH_VERSION) $(CHPL_COMPAT_FLAGS) $(ARKOUDA_MAIN_SOURCE) $(ARKOUDA_COMPAT_MODULES) $(ARKOUDA_SERVER_USER_MODULES) $(MOD_GEN_OUT) $(ARKOUDA_RW_DEFAULT_FLAG) $(ARKOUDA_KEYPART_FLAG) $(ARKOUDA_REGISTRY_DIR)/Commands.chpl -I$(ARKOUDA_SOURCE_DIR)/parquet -o $@
+	$(CHPL) $(CHPL_DEBUG_FLAGS) $(PRINT_PASSES_FLAGS) $(REGEX_MAX_CAPTURES_FLAG) $(OPTIONAL_SERVER_FLAGS) $(CHPL_FLAGS_WITH_VERSION) $(CHPL_COMPAT_FLAGS) $(ARKOUDA_MAIN_SOURCE) $(ARKOUDA_COMPAT_MODULES) $(ARKOUDA_SERVER_USER_MODULES) $(MOD_GEN_OUT) $(ARKOUDA_RW_DEFAULT_FLAG) $(ARKOUDA_KEYPART_FLAG) $(ARKOUDA_REGISTRY_DIR)/Commands.chpl $(JITCWRAPPER_O) $(JITCWRAPPER_LDFLAGS) -I$(ARKOUDA_SOURCE_DIR)/parquet -I$(ARKOUDA_SOURCE_DIR)/jitcwrapper -o $@
 
 CLEAN_TARGETS += arkouda-clean
 .PHONY: arkouda-clean
 arkouda-clean:
-	$(RM) $(ARKOUDA_MAIN_MODULE) $(ARKOUDA_MAIN_MODULE)_real $(ARROW_UTIL_O) $(ARROW_READ_O) $(ARROW_WRITE_O)
+	$(RM) $(ARKOUDA_MAIN_MODULE) $(ARKOUDA_MAIN_MODULE)_real $(ARROW_UTIL_O) $(ARROW_READ_O) $(ARROW_WRITE_O) $(JITCWRAPPER_O)
 
 .PHONY: tags
 tags:
