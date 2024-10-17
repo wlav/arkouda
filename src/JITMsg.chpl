@@ -18,21 +18,27 @@ module JITMsg
 
     extern {
 
+        #include <stdint.h>
         #include "JITCWrapper.h"
 
-        typedef double (*disp_1d_t)(double);
+        typedef int64_t (*disp_1d_i64_t)(int64_t);
+        typedef double (*disp_1d_f64_t)(double);
 
         int dispIsValid(gen_disp_t fdisp);
-        double callDisp1D(gen_disp_t, double);
+        int64_t callDisp1D_i64(gen_disp_t, int64_t);
+        double callDisp1D_f64(gen_disp_t, double);
 
         int dispIsValid(gen_disp_t fdisp) {
             return (int)(fdisp != (gen_disp_t)0);
         }
 
-        double callDisp1D(gen_disp_t fdisp, double d) {
-            return ((disp_1d_t)fdisp)(d);
+        int64_t callDisp1D_i64(gen_disp_t fdisp, int64_t i) {
+            return ((disp_1d_i64_t)fdisp)(i);
         }
 
+        double callDisp1D_f64(gen_disp_t fdisp, double d) {
+            return ((disp_1d_f64_t)fdisp)(d);
+        }
     }
 
     var initOK: bool = JITMsg_initializeLLVMJIT() == 0;
@@ -78,6 +84,7 @@ module JITMsg
             }
 
             var repMsg: string;
+            var typMsg = MsgType.NORMAL;
 
             var arr: borrowed GenSymEntry = getGenericTypedArrayEntry(arr_name, st);
             select (arr.dtype) {
@@ -85,20 +92,38 @@ module JITMsg
                     var l = toSymEntry(arr, real, nd);
                     if (inplace) {
                         forall a in l.a do
-                            a = callDisp1D(fdisp, a);
+                            a = callDisp1D_f64(fdisp, a);
                         repMsg = "success";
                     } else {
                         var rname = st.nextName();
                         var e = st.addEntry(rname, l.tupShape, real);
                         e.a = forall a in l.a do
-                                  callDisp1D(fdisp, a);
+                                  callDisp1D_f64(fdisp, a);
                         repMsg = "created %s".format(st.attrib(rname));
                     }
+                }
+                when (DType.Int64) {
+                    var l = toSymEntry(arr, int, nd);
+                    if (inplace) {
+                        forall a in l.a do
+                            a = callDisp1D_i64(fdisp, a);
+                        repMsg = "success";
+                    } else {
+                        var rname = st.nextName();
+                        var e = st.addEntry(rname, l.tupShape, int);
+                        e.a = forall a in l.a do
+                                  callDisp1D_i64(fdisp, a);
+                        repMsg = "created %s".format(st.attrib(rname));
+                    }
+                }
+                otherwise {
+                    repMsg = "Unsupported array data type";
+                    typMsg = MsgType.ERROR;
                 }
             }
 
             JITMsg_ClearMainDyLib();
-            return new MsgTuple(repMsg, MsgType.NORMAL);
+            return new MsgTuple(repMsg, typMsg);
         }
 
         return new MsgTuple("Unknown JIT request", MsgType.ERROR);
