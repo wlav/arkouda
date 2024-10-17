@@ -1,7 +1,9 @@
 import arkouda as ak
 
 import base64
+import os
 import pickle
+import sys
 
 import numba.core.codegen as nb_cg
 import numba.core.compiler as nb_cmp
@@ -161,7 +163,14 @@ def ir_compile(*args, **kwds):
 
     def server_cfunc(*args, **kwds):
         with ServerLLVMTarget():
-            return cf(*args, **kwds)
+            try:
+                return cf(*args, **kwds)
+            except Exception as e:
+                devmode = os.getenv("ARKOUDA_SERVER_JIT_DEVMODE")
+                tb = None
+                if devmode and devmode.lower() not in ["0", "false"]:
+                     tb = sys.exc_info()[2]
+                raise e.with_traceback(tb)
 
     return server_cfunc
 
