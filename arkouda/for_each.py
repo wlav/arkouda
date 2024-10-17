@@ -5,7 +5,7 @@ __all__ = ['for_each']
 
 
 def for_each(pda_in, functor, inplace=False):
-    sfunc = ak.dispatch_utils.ir_compile("double(double)")(functor)
+    sfunc = ak.dispatch_utils.ir_compile("{0}({0})".format(pda_in.dtype))(functor)
 
     server_msg = ak.client.generic_msg(
         "jit1D",
