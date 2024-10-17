@@ -13,9 +13,6 @@ def polyval(x, c, tensor=True):
     if not isinstance(x, ak.pdarray):
         return nppoly.polynomial.polyval(x, c, tensor)
 
-    # TODO: once Polynomial support in Numba is out of the experimental stage,
-    # it should be possible to send a nppoly.Polynomial(c) directly instead
-
     # calling `nppoly.polynomial.polyval(x, c, tensor)` directly in `poly` below
     # works fine, but it means executing the following one-off code inside the
     # loop, so for efficiency reasons, the code from numpy's `polyval` is copied:
